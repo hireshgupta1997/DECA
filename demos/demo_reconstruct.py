@@ -102,7 +102,7 @@ if __name__ == '__main__':
     parser.add_argument('--detector', default='fan', type=str,
                         help='detector for cropping face, check decalib/detectors.py for details' )
     # rendering option
-    parser.add_argument('--rasterizer_type', default='standard', type=str,
+    parser.add_argument('--rasterizer_type', default='pytorch3d', type=str,
                         help='rasterizer type: pytorch3d or standard' )
     parser.add_argument('--render_orig', default=True, type=lambda x: x.lower() in ['true', '1'],
                         help='whether to render results in original image size, currently only works when rasterizer_type=standard')
