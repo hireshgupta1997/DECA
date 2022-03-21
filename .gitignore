@@ -49,3 +49,7 @@ internal
 
 TestSamples/
 deca_downloads/
+
+/.idea/
+*.iml
+*.xm
