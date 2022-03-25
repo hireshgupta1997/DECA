@@ -17,13 +17,14 @@ import numpy as np
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from . import resnet
+from decalib.models import resnet
+
 
 class ResnetEncoder(nn.Module):
     def __init__(self, outsize, last_op=None):
         super(ResnetEncoder, self).__init__()
         feature_size = 2048
-        self.encoder = resnet.load_ResNet50Model() #out: 2048
+        self.encoder = resnet.load_ResNet50Model()  # out: 2048
         ### regressor
         self.layers = nn.Sequential(
             nn.Linear(feature_size, 1024),
@@ -38,3 +39,14 @@ class ResnetEncoder(nn.Module):
         if self.last_op:
             parameters = self.last_op(parameters)
         return parameters
+
+
+if __name__ == "__main__":
+    device = "cuda"
+
+    import sys
+    import os
+
+    sys.path.append(os.path.dirname("."))
+
+    E_flame = ResnetEncoder(outsize=236).to(device)

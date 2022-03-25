@@ -38,7 +38,7 @@ def main(args):
     os.makedirs(savefolder, exist_ok=True)
 
     # load test images 
-    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)
+    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)  # face-detector = 'fan'; args.iscrop=True should be false
 
     # run DECA
     deca_cfg.model.use_tex = args.useTex
@@ -50,7 +50,9 @@ def main(args):
         images = testdata[i]['image'].to(device)[None, ...]
         with torch.no_grad():
             codedict = deca.encode(images)
-            opdict, visdict = deca.decode(codedict)  # tensor
+            # codedict.keys = dict_keys(['shape', 'tex', 'exp', 'pose', 'cam', 'light', 'images', 'detail'])
+            opdict, visdict = deca.decode(codedict)
+            # decodes vertices etc.
             if args.render_orig:
                 tform = testdata[i]['tform'][None, ...]
                 tform = torch.inverse(tform).transpose(1, 2).to(device)

@@ -24,15 +24,15 @@ from time import time
 from skimage.io import imread
 import cv2
 import pickle
-from .utils.renderer import SRenderY, set_rasterizer
-from .models.encoders import ResnetEncoder
-from .models.FLAME import FLAME, FLAMETex
-from .models.decoders import Generator
-from .utils import util
-from .utils.rotation_converter import batch_euler2axis
-from .utils.tensor_cropper import transform_points
-from .datasets import datasets
-from .utils.config import cfg
+from decalib.utils.renderer import SRenderY, set_rasterizer
+from decalib.models.encoders import ResnetEncoder
+from decalib.models.FLAME import FLAME, FLAMETex
+from decalib.models.decoders import Generator
+from decalib.utils import util
+from decalib.utils.rotation_converter import batch_euler2axis
+from decalib.utils.tensor_cropper import transform_points
+from decalib.datasets import datasets
+from decalib.utils.config import cfg
 
 torch.backends.cudnn.benchmark = True
 
@@ -56,21 +56,24 @@ class DECA(nn.Module):
         self.render = SRenderY(self.image_size, obj_filename=model_cfg.topology_path, uv_size=model_cfg.uv_size,
                                rasterizer_type=self.cfg.rasterizer_type).to(self.device)
         # face mask for rendering details
-        mask = imread(model_cfg.face_eye_mask_path).astype(np.float32) / 255.;
-        mask = torch.from_numpy(mask[:, :, 0])[None, None, :, :].contiguous()
+        mask = imread(model_cfg.face_eye_mask_path).astype(np.float32) / 255.
+        mask = torch.from_numpy(mask[:, :, 0])[None, None, :, :].contiguous()  # (1, 1, 256, 256)
         self.uv_face_eye_mask = F.interpolate(mask, [model_cfg.uv_size, model_cfg.uv_size]).to(self.device)
-        mask = imread(model_cfg.face_mask_path).astype(np.float32) / 255.;
+        mask = imread(model_cfg.face_mask_path).astype(np.float32) / 255.
         mask = torch.from_numpy(mask[:, :, 0])[None, None, :, :].contiguous()
-        self.uv_face_mask = F.interpolate(mask, [model_cfg.uv_size, model_cfg.uv_size]).to(self.device)
+        self.uv_face_mask = F.interpolate(mask, [model_cfg.uv_size, model_cfg.uv_size]).to(
+            self.device)  # (1, 1, 256, 256)
         # displacement correction
-        fixed_dis = np.load(model_cfg.fixed_displacement_path)
+        fixed_dis = np.load(model_cfg.fixed_displacement_path)  # (256, 256)
         self.fixed_uv_dis = torch.tensor(fixed_dis).float().to(self.device)
         # mean texture
         mean_texture = imread(model_cfg.mean_tex_path).astype(np.float32) / 255.
         mean_texture = torch.from_numpy(mean_texture.transpose(2, 0, 1))[None, :, :, :].contiguous()
-        self.mean_texture = F.interpolate(mean_texture, [model_cfg.uv_size, model_cfg.uv_size]).to(self.device)
+        self.mean_texture = F.interpolate(mean_texture, [model_cfg.uv_size, model_cfg.uv_size]).to(
+            self.device)  # (1, 3, 256, 256)
         # dense mesh template, for save detail mesh
         self.dense_template = np.load(model_cfg.dense_template_path, allow_pickle=True, encoding='latin1').item()
+        # model_cfg.dense_template_path ='/home/secret-user/Capstone/DECA/data/texture_data_256.npy'
 
     def _create_model(self, model_cfg):
         # set up parameters
@@ -80,6 +83,7 @@ class DECA(nn.Module):
         self.num_list = [model_cfg.n_shape, model_cfg.n_tex, model_cfg.n_exp, model_cfg.n_pose, model_cfg.n_cam,
                          model_cfg.n_light]
         self.param_dict = {i: model_cfg.get('n_' + i) for i in model_cfg.param_list}
+        # param_dict = {'shape': 100, 'tex': 50, 'exp': 50, 'pose': 6, 'cam': 3, 'light': 27}
 
         # encoders
         self.E_flame = ResnetEncoder(outsize=self.n_param).to(self.device)
@@ -152,12 +156,14 @@ class DECA(nn.Module):
             with torch.no_grad():
                 parameters = self.E_flame(images)
         else:
-            parameters = self.E_flame(images)
+            parameters = self.E_flame(images)  # (1, 236)
         codedict = self.decompose_code(parameters, self.param_dict)
+        # distributes encoding to a param_dict: {'shape': 100, 'tex': 50, 'exp': 50, 'pose': 6, 'cam': 3, 'light': 27}
         codedict['images'] = images
         if use_detail:
             detailcode = self.E_detail(images)
             codedict['detail'] = detailcode
+        # By default we are using 'aa' as a jaw_type
         if self.cfg.model.jaw_type == 'euler':
             posecode = codedict['pose']
             euler_jaw_pose = posecode[:, 3:].clone()  # x for yaw (open mouth), y for pitch (left ang right), z for roll
@@ -177,6 +183,7 @@ class DECA(nn.Module):
                                                      pose_params=codedict['pose'])
         if self.cfg.model.use_tex:
             albedo = self.flametex(codedict['tex'])
+            # Texture code is generated using a (1, 50) vector
         else:
             albedo = torch.zeros([batch_size, 3, self.uv_size, self.uv_size], device=images.device)
         landmarks3d_world = landmarks3d.clone()
@@ -256,10 +263,10 @@ class DECA(nn.Module):
             if self.cfg.model.use_tex:
                 ## TODO: poisson blending should give better-looking results
                 uv_texture_gt = uv_gt[:, :3, :, :] * self.uv_face_eye_mask + (
-                            uv_texture[:, :3, :, :] * (1 - self.uv_face_eye_mask))
+                        uv_texture[:, :3, :, :] * (1 - self.uv_face_eye_mask))
             else:
                 uv_texture_gt = uv_gt[:, :3, :, :] * self.uv_face_eye_mask + (
-                            torch.ones_like(uv_gt[:, :3, :, :]) * (1 - self.uv_face_eye_mask) * 0.7)
+                        torch.ones_like(uv_gt[:, :3, :, :]) * (1 - self.uv_face_eye_mask) * 0.7)
 
             opdict['uv_texture_gt'] = uv_texture_gt
             visdict = {
@@ -343,3 +350,10 @@ class DECA(nn.Module):
             'E_detail': self.E_detail.state_dict(),
             'D_detail': self.D_detail.state_dict()
         }
+
+
+if __name__ == "__main__":
+    from decalib.utils.config import cfg as deca_cfg
+
+    deca = DECA(config=deca_cfg, device='cuda')
+    print("Successfully loaded deca model")

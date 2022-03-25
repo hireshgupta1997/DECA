@@ -19,7 +19,7 @@ import numpy as np
 import pickle
 import torch.nn.functional as F
 
-from .lbs import lbs, batch_rodrigues, vertices2landmarks, rot_mat_to_euler
+from decalib.models.lbs import lbs, batch_rodrigues, vertices2landmarks, rot_mat_to_euler
 
 def to_tensor(array, dtype=torch.float32):
     if 'torch.tensor' not in str(type(array)):
@@ -182,6 +182,7 @@ class FLAME(nn.Module):
                 vertices: N X V X 3
                 landmarks: N X number of landmarks X 3
         """
+        # todo: Look into this in detail
         batch_size = shape_params.shape[0]
         if pose_params is None:
             pose_params = self.eye_pose.expand(batch_size, -1)
@@ -262,3 +263,21 @@ class FLAMETex(nn.Module):
         texture = F.interpolate(texture, [256, 256])
         texture = texture[:,[2,1,0], :,:]
         return texture
+
+
+if __name__ == "__main__":
+    print("Running Flame.py")
+    device = "cpu"
+    from decalib.utils.config import cfg as deca_cfg
+
+    shape_params = torch.rand(1, 100)
+    expression_params = torch.rand(1, 50)
+    pose_params = torch.rand(1, 6)
+    texture_params = torch.rand(1, 50)
+
+    flame = FLAME(deca_cfg.model).to(device=device)
+    verts, landmarks2d, landmarks3d = flame(shape_params, expression_params, pose_params)
+
+    # Testing FlameTex
+    flametex = FLAMETex(deca_cfg.model).to(device=device)
+    albedo = flametex(texture_params)
