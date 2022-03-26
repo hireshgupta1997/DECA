@@ -92,8 +92,8 @@ class DECA(nn.Module):
         self.flame = FLAME(model_cfg).to(self.device)
         if model_cfg.use_tex:
             self.flametex = FLAMETex(model_cfg).to(self.device)
-        self.D_detail = Generator(latent_dim=self.n_detail + self.n_cond, out_channels=1, out_scale=model_cfg.max_z,
-                                  sample_mode='bilinear').to(self.device)
+        self.D_detail = Generator(latent_dim=self.n_detail + self.n_cond, out_channels=1, out_scale=model_cfg.max_z,  # 0.01
+                                  sample_mode='bilinear').to(self.device)  # n_detail =128, n_cond = 53
         # resume model
         model_path = self.cfg.pretrained_modelpath
         if os.path.exists(model_path):
@@ -132,14 +132,14 @@ class DECA(nn.Module):
         uv_coarse_vertices = self.render.world2uv(coarse_verts).detach()
         uv_coarse_normals = self.render.world2uv(coarse_normals).detach()
 
-        uv_z = uv_z * self.uv_face_eye_mask
+        uv_z = uv_z * self.uv_face_eye_mask  # only operate on Face Eye region
         uv_detail_vertices = uv_coarse_vertices + uv_z * uv_coarse_normals + self.fixed_uv_dis[None, None, :,
-                                                                             :] * uv_coarse_normals.detach()
+                                                                             :] * uv_coarse_normals.detach()  # update vertices by predicted z and normals
         dense_vertices = uv_detail_vertices.permute(0, 2, 3, 1).reshape([batch_size, -1, 3])
-        uv_detail_normals = util.vertex_normals(dense_vertices, self.render.dense_faces.expand(batch_size, -1, -1))
+        uv_detail_normals = util.vertex_normals(dense_vertices, self.render.dense_faces.expand(batch_size, -1, -1))  # todo: Understand in detail
         uv_detail_normals = uv_detail_normals.reshape(
             [batch_size, uv_coarse_vertices.shape[2], uv_coarse_vertices.shape[3], 3]).permute(0, 3, 1, 2)
-        uv_detail_normals = uv_detail_normals * self.uv_face_eye_mask + uv_coarse_normals * (1 - self.uv_face_eye_mask)
+        uv_detail_normals = uv_detail_normals * self.uv_face_eye_mask + uv_coarse_normals * (1 - self.uv_face_eye_mask)  # Keep coarse normals from outer region
         return uv_detail_normals
 
     def visofp(self, normals):
@@ -218,22 +218,22 @@ class DECA(nn.Module):
             opdict['albedo'] = albedo
 
         if use_detail:
-            uv_z = self.D_detail(torch.cat([codedict['pose'][:, 3:], codedict['exp'], codedict['detail']], dim=1))
+            uv_z = self.D_detail(torch.cat([codedict['pose'][:, 3:], codedict['exp'], codedict['detail']], dim=1))  # They pass detail & expression code to Detail decoder
             if iddict is not None:
-                uv_z = self.D_detail(torch.cat([iddict['pose'][:, 3:], iddict['exp'], codedict['detail']], dim=1))
+                uv_z = self.D_detail(torch.cat([iddict['pose'][:, 3:], iddict['exp'], codedict['detail']], dim=1))  # Used to pass id terms
             uv_detail_normals = self.displacement2normal(uv_z, verts, ops['normals'])
-            uv_shading = self.render.add_SHlight(uv_detail_normals, codedict['light'])
+            uv_shading = self.render.add_SHlight(uv_detail_normals, codedict['light'])  # using Spherical Harmonics (2001) model for lighting
             uv_texture = albedo * uv_shading
 
-            opdict['uv_texture'] = uv_texture
-            opdict['normals'] = ops['normals']
-            opdict['uv_detail_normals'] = uv_detail_normals
-            opdict['displacement_map'] = uv_z + self.fixed_uv_dis[None, None, :, :]
+            opdict['uv_texture'] = uv_texture  # (1, 3, 256, 256)
+            opdict['normals'] = ops['normals']  # (1, 5023, 3)
+            opdict['uv_detail_normals'] = uv_detail_normals  # (1, 5023, 3)
+            opdict['displacement_map'] = uv_z + self.fixed_uv_dis[None, None, :, :]  # (1, 1, 256, 256)
 
         if vis_lmk:
-            landmarks3d_vis = self.visofp(ops['transformed_normals'])  # /self.image_size
+            landmarks3d_vis = self.visofp(ops['transformed_normals'])    # checking visibility of landmarks
             landmarks3d = torch.cat([landmarks3d, landmarks3d_vis], dim=2)
-            opdict['landmarks3d'] = landmarks3d
+            opdict['landmarks3d'] = landmarks3d  # (1, 68, 4)
 
         if return_vis:
             if render_orig and original_image is not None and tform is not None:
@@ -251,10 +251,10 @@ class DECA(nn.Module):
             ## render shape
             shape_images, _, grid, alpha_images = self.render.render_shape(verts, trans_verts, h=h, w=w,
                                                                            images=background, return_grid=True)
-            detail_normal_images = F.grid_sample(uv_detail_normals, grid, align_corners=False) * alpha_images
+            detail_normal_images = F.grid_sample(uv_detail_normals, grid, align_corners=False) * alpha_images  # computes the output using input values and pixel locations from grid.
             shape_detail_images = self.render.render_shape(verts, trans_verts,
                                                            detail_normal_images=detail_normal_images, h=h, w=w,
-                                                           images=background)
+                                                           images=background)  # Re-render using detailed normal map
 
             ## extract texture
             ## TODO: current resolution 256x256, support higher resolution, and add visibility
@@ -273,8 +273,8 @@ class DECA(nn.Module):
                 'inputs': images,
                 'landmarks2d': util.tensor_vis_landmarks(images, landmarks2d),
                 'landmarks3d': util.tensor_vis_landmarks(images, landmarks3d),
-                'shape_images': shape_images,
-                'shape_detail_images': shape_detail_images
+                'shape_images': shape_images,  # (1, 3, 224, 224)
+                'shape_detail_images': shape_detail_images  # (1, 3, 224, 224)
             }
             if self.cfg.model.use_tex:
                 visdict['rendered_images'] = ops['images']

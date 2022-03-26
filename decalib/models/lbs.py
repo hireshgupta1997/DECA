@@ -180,12 +180,12 @@ def lbs(betas, pose, v_template, shapedirs, posedirs, J_regressor, parents,
     batch_size = max(betas.shape[0], pose.shape[0])
     device = betas.device
 
-    # Add shape contribution
+    # 1. Add shape contribution
     v_shaped = v_template + blend_shapes(betas, shapedirs)
 
-    # Get the joints
+    # 2. Get the joints
     # NxJx3 array
-    J = vertices2joints(J_regressor, v_shaped)
+    J = vertices2joints(J_regressor, v_shaped)  # (1, 5, 3)
 
     # 3. Add pose blend shapes
     # N x J x 3 x 3

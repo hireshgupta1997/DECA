@@ -366,7 +366,7 @@ class SRenderY(nn.Module):
         batch_size = vertices.shape[0]
         # set lighting
         if lights is None:
-            light_positions = torch.tensor(
+            light_positions = torch.tensor(  # Lights for 5 directions
                 [
                     [-1, 1, 1],
                     [1, 1, 1],
@@ -377,31 +377,31 @@ class SRenderY(nn.Module):
             )[None, :, :].expand(batch_size, -1, -1).float()
             light_intensities = torch.ones_like(light_positions).float() * 1.7
             lights = torch.cat((light_positions, light_intensities), 2).to(vertices.device)
-        transformed_vertices[:, :, 2] = transformed_vertices[:, :, 2] + 10
+        transformed_vertices[:, :, 2] = transformed_vertices[:, :, 2] + 10  # Adding 10 in z co-ordinates
 
         # Attributes
-        face_vertices = util.face_vertices(vertices, self.faces.expand(batch_size, -1, -1))
-        normals = util.vertex_normals(vertices, self.faces.expand(batch_size, -1, -1));
+        face_vertices = util.face_vertices(vertices, self.faces.expand(batch_size, -1, -1))  # (1, 9976, 3, 3)
+        normals = util.vertex_normals(vertices, self.faces.expand(batch_size, -1, -1))  # Find normals for different faces
         face_normals = util.face_vertices(normals, self.faces.expand(batch_size, -1, -1))
         transformed_normals = util.vertex_normals(transformed_vertices, self.faces.expand(batch_size, -1, -1));
         transformed_face_normals = util.face_vertices(transformed_normals, self.faces.expand(batch_size, -1, -1))
         if colors is None:
-            colors = self.face_colors.expand(batch_size, -1, -1, -1)
+            colors = self.face_colors.expand(batch_size, -1, -1, -1)  # (1, 9976, 3, 3)
         attributes = torch.cat([colors,
                                 transformed_face_normals.detach(),
                                 face_vertices.detach(),
                                 face_normals,
                                 self.face_uvcoords.expand(batch_size, -1, -1, -1)],
-                               -1)
+                               -1)  # Everything is of the same dimension
         # rasterize
         # import ipdb; ipdb.set_trace()
-        rendering = self.rasterizer(transformed_vertices, self.faces.expand(batch_size, -1, -1), attributes, h, w)
+        rendering = self.rasterizer(transformed_vertices, self.faces.expand(batch_size, -1, -1), attributes, h, w)  # (1, 16, h, w)
 
         ####
-        alpha_images = rendering[:, -1, :, :][:, None, :, :].detach()
+        alpha_images = rendering[:, -1, :, :][:, None, :, :].detach()  # (1, 1, 224, 224)
 
         # albedo
-        albedo_images = rendering[:, :3, :, :]
+        albedo_images = rendering[:, :3, :, :]  # First 3 indices correspond to albedo
         # mask
         transformed_normal_map = rendering[:, 3:6, :, :].detach()
         pos_mask = (transformed_normal_map[:, 2:, :, :] < 0.15).float()
@@ -425,8 +425,8 @@ class SRenderY(nn.Module):
         else:
             shape_images = shaded_images * alpha_images + images * (1 - alpha_images)
         if return_grid:
-            uvcoords_images = rendering[:, 12:15, :, :];
-            grid = (uvcoords_images).permute(0, 2, 3, 1)[:, :, :, :2]
+            uvcoords_images = rendering[:, 12:15, :, :]  # computed via face_uvcoords
+            grid = (uvcoords_images).permute(0, 2, 3, 1)[:, :, :, :2]  # (1, 224, 224, 2)
             return shape_images, normal_images, grid, alpha_images
         else:
             return shape_images
