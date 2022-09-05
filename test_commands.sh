@@ -1,12 +1,13 @@
 
 ## Reconstruction
 
-python demos/demo_reconstruct.py -i TestSamples/examples -s TestSamples/examples/Reconstruction_results --saveDepth True --saveObj True
+python demos/demo_reconstruct.py -i TestSamples/examples -s TestSamples/examples/Reconstruction_results --saveDepth True --saveObj True  --saveImages True  --saveKpt True
 
 python demos/demo_reconstruct.py -i TestSamples/AFLW2000 -s TestSamples/AFLW2000/Reconstruction_results --saveDepth True --saveObj True
 
+python demos/demo_reconstruct.py -i TestSamples/Sample_Faces -s TestSamples/Sample_Faces/Reconstruction_results --saveDepth True --saveObj True --saveImages True  --saveKpt True
 
-python demos/demo_reconstruct.py -i TestSamples/Sample_Faces -s TestSamples/Sample_Faces/Reconstruction_results --saveDepth True --saveObj True
+python demos/demo_reconstruct.py -i TestSamples/Sample_Faces -s TestSamples/Sample_Faces/Reconstruction_results --saveDepth True --saveObj True --saveImages True  --saveKpt True
 
 python demos/demo_reconstruct.py -i TestSamples/debug -s TestSamples/debug/Reconstruction_results --saveDepth True --saveObj True
 

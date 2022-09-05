@@ -9,7 +9,7 @@ import cv2
 import torchfile
 from torch.autograd import Variable
 
-from . import util
+import decalib.utils.util as util
 
 
 def l2_distance(verts1, verts2):
@@ -408,12 +408,12 @@ class IDMRFLoss(nn.Module):
 
     def mrf_loss(self, gen, tar):
         meanT = torch.mean(tar, 1, keepdim=True)
-        gen_feats, tar_feats = gen - meanT, tar - meanT
+        gen_feats, tar_feats = gen - meanT, tar - meanT  # gen center -> same as  target center
 
         gen_feats_norm = torch.norm(gen_feats, p=2, dim=1, keepdim=True)
         tar_feats_norm = torch.norm(tar_feats, p=2, dim=1, keepdim=True)
 
-        gen_normalized = gen_feats / gen_feats_norm
+        gen_normalized = gen_feats / gen_feats_norm  # moved generated features to a unit sphere
         tar_normalized = tar_feats / tar_feats_norm
 
         cosine_dist_l = []
@@ -424,15 +424,15 @@ class IDMRFLoss(nn.Module):
             gen_feat_i = gen_normalized[i:i+1, :, :, :]
             patches_OIHW = self.patch_extraction(tar_feat_i)
 
-            cosine_dist_i = F.conv2d(gen_feat_i, patches_OIHW)
+            cosine_dist_i = F.conv2d(gen_feat_i, patches_OIHW)   # (1, 3136, 56, 56)
             cosine_dist_l.append(cosine_dist_i)
         cosine_dist = torch.cat(cosine_dist_l, dim=0)
         cosine_dist_zero_2_one = - (cosine_dist - 1) / 2
-        relative_dist = self.compute_relative_distances(cosine_dist_zero_2_one)
+        relative_dist = self.compute_relative_distances(cosine_dist_zero_2_one)  # [b, 3136, 56, 56]
         rela_dist = self.exp_norm_relative_dist(relative_dist)
-        dims_div_mrf = rela_dist.size()
-        k_max_nc = torch.max(rela_dist.view(dims_div_mrf[0], dims_div_mrf[1], -1), dim=2)[0]
-        div_mrf = torch.mean(k_max_nc, dim=1)
+        dims_div_mrf = rela_dist.size()  # [3136 -> target, 56 * 56 -> target]
+        k_max_nc = torch.max(rela_dist.view(dims_div_mrf[0], dims_div_mrf[1], -1), dim=2)[0]  #  closest generated patch for each target
+        div_mrf = torch.mean(k_max_nc, dim=1)     # mean of maximum simlarities of every target among all generated patches
         div_mrf_sum = -torch.log(div_mrf)
         div_mrf_sum = torch.sum(div_mrf_sum)
         return div_mrf_sum
@@ -636,7 +636,7 @@ class VGGLoss(nn.Module):
 
 ##############################################
 ## ref: https://github.com/cydonia999/VGGFace2-pytorch
-from ..models.frnet import resnet50, load_state_dict
+from decalib.models.frnet import resnet50, load_state_dict
 class VGGFace2Loss(nn.Module):
     def __init__(self, pretrained_model, pretrained_data='vggface2'):
         super(VGGFace2Loss, self).__init__()
@@ -673,3 +673,14 @@ class VGGFace2Loss(nn.Module):
         # loss = ((gen_out - tar_out)**2).mean()
         loss = self._cos_metric(gen_out, tar_out).mean()
         return loss
+
+
+if __name__ == "__main__":
+    idmrf = IDMRFLoss().cuda()
+
+    # [bz, 3, h, w]
+    # rgb[0, 1]
+    gen = torch.rand(2, 3, 224, 224).cuda()
+    tar = torch.rand(2, 3, 224, 224).cuda()
+
+    out = idmrf(gen, tar)

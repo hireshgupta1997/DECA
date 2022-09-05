@@ -43,10 +43,4 @@ class ResnetEncoder(nn.Module):
 
 if __name__ == "__main__":
     device = "cuda"
-
-    import sys
-    import os
-
-    sys.path.append(os.path.dirname("."))
-
     E_flame = ResnetEncoder(outsize=236).to(device)

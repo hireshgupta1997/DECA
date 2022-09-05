@@ -197,7 +197,7 @@ class FLAME(nn.Module):
         if pose_params is None:
             pose_params = self.eye_pose.expand(batch_size, -1)
         if eye_pose_params is None:
-            eye_pose_params = self.eye_pose.expand(batch_size, -1)  # (1, 6)
+            eye_pose_params = self.eye_pose.expand(batch_size, -1)  # (1, 6) # (passed zeros by default)
         betas = torch.cat([shape_params, expression_params], dim=1)  # (1, 150)
         full_pose = torch.cat(
             [pose_params[:, :3], self.neck_pose.expand(batch_size, -1), pose_params[:, 3:], eye_pose_params],
