@@ -139,7 +139,7 @@ class DECA(nn.Module):
         uv_detail_normals = util.vertex_normals(dense_vertices, self.render.dense_faces.expand(batch_size, -1, -1))  # (1, 122990, 3) todo: Understand in detail
         uv_detail_normals = uv_detail_normals.reshape(
             [batch_size, uv_coarse_vertices.shape[2], uv_coarse_vertices.shape[3], 3]).permute(0, 3, 1, 2)
-        uv_detail_normals = uv_detail_normals * self.uv_face_eye_mask + uv_coarse_normals * (1 - self.uv_face_eye_mask)  # Keep coarse normals from outer region
+        uv_detail_normals = uv_detail_normals * self.uv_face_eye_mask + uv_coarse_normals * (1.0 - self.uv_face_eye_mask)  # Keep coarse normals from outer region
         return uv_detail_normals
 
     def visofp(self, normals):
@@ -206,8 +206,22 @@ class DECA(nn.Module):
         }
 
         ## rendering
+        if return_vis and render_orig and original_image is not None and tform is not None:
+            points_scale = [self.image_size, self.image_size]
+            _, _, h, w = original_image.shape
+            # import ipdb; ipdb.set_trace()
+            trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
+            landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
+            landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
+            background = original_image
+            images = original_image
+        else:
+            h, w = self.image_size, self.image_size
+            background = None
+
         if rendering:
-            ops = self.render(verts, trans_verts, albedo, codedict['light'])
+            # ops = self.render(verts, trans_verts, albedo, codedict['light'])
+            ops = self.render(verts, trans_verts, albedo, h=h, w=w, background=background)
             ## output
             opdict['grid'] = ops['grid']
             opdict['rendered_images'] = ops['images']
@@ -237,18 +251,6 @@ class DECA(nn.Module):
             opdict['landmarks3d'] = landmarks3d  # (1, 68, 4)
 
         if return_vis:
-            if render_orig and original_image is not None and tform is not None:
-                points_scale = [self.image_size, self.image_size]
-                _, _, h, w = original_image.shape
-                # import ipdb; ipdb.set_trace()
-                trans_verts = transform_points(trans_verts, tform, points_scale, [h, w])
-                landmarks2d = transform_points(landmarks2d, tform, points_scale, [h, w])
-                landmarks3d = transform_points(landmarks3d, tform, points_scale, [h, w])
-                background = original_image
-                images = original_image
-            else:
-                h, w = self.image_size, self.image_size
-                background = None
             ## render shape
             shape_images, _, grid, alpha_images = self.render.render_shape(verts, trans_verts, h=h, w=w,
                                                                            images=background, return_grid=True)
@@ -260,11 +262,15 @@ class DECA(nn.Module):
             ## extract texture
             ## TODO: current resolution 256x256, support higher resolution, and add visibility
             uv_pverts = self.render.world2uv(trans_verts)
-            uv_gt = F.grid_sample(images, uv_pverts.permute(0, 2, 3, 1)[:, :, :, :2], mode='bilinear')
+            uv_gt = F.grid_sample(images, uv_pverts.permute(0, 2, 3, 1)[:, :, :, :2], mode='bilinear', align_corners=False)
             if self.cfg.model.use_tex:
                 ## TODO: poisson blending should give better-looking results
-                uv_texture_gt = uv_gt[:, :3, :, :] * self.uv_face_eye_mask + (
-                        uv_texture[:, :3, :, :] * (1 - self.uv_face_eye_mask))
+                if self.cfg.model.extract_tex:
+                    uv_texture_gt = uv_gt[:, :3, :, :] * self.uv_face_eye_mask + (
+                            uv_texture[:, :3, :, :] * (1 - self.uv_face_eye_mask))
+                else:
+                    uv_texture_gt = uv_texture[:, :3, :, :]
+
             else:
                 uv_texture_gt = uv_gt[:, :3, :, :] * self.uv_face_eye_mask + (
                         torch.ones_like(uv_gt[:, :3, :, :]) * (1 - self.uv_face_eye_mask) * 0.7)

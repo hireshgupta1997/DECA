@@ -47,9 +47,10 @@ __pycache__
 cluster_scripts
 internal
 
-TestSamples/
 deca_downloads/
 
 /.idea/
 *.iml
 *.xm
+
+*TestSamples*

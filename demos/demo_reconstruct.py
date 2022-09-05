@@ -38,11 +38,12 @@ def main(args):
     os.makedirs(savefolder, exist_ok=True)
 
     # load test images 
-    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector)  # face-detector = 'fan'; args.iscrop=True should be false
+    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector, sample_step=args.sample_step)  # face-detector = 'fan'; args.iscrop=True should be false
 
     # run DECA
     deca_cfg.model.use_tex = args.useTex
     deca_cfg.rasterizer_type = args.rasterizer_type
+    deca_cfg.model.extract_tex = args.extractTex
     deca = DECA(config=deca_cfg, device=device)
     # for i in range(len(testdata)):
     for i in tqdm(range(len(testdata))):
@@ -105,7 +106,9 @@ if __name__ == '__main__':
                         help='set device, cpu for using cpu')
     # process test images
     parser.add_argument('--iscrop', default=True, type=lambda x: x.lower() in ['true', '1'],
-                        help='whether to crop input image, set false only when the test image are well cropped')
+                        help='whether to crop input image, set false only when the test image are well cropped' )
+    parser.add_argument('--sample_step', default=10, type=int,
+                        help='sample images from video data for every step' )
     parser.add_argument('--detector', default='fan', type=str,
                         help='detector for cropping face, check decalib/detectors.py for details')
     # rendering option
@@ -116,7 +119,9 @@ if __name__ == '__main__':
     # save
     parser.add_argument('--useTex', default=True, type=lambda x: x.lower() in ['true', '1'],
                         help='whether to use FLAME texture model to generate uv texture map, \
-                            set it to True only if you downloaded texture model')
+                            set it to True only if you downloaded texture model' )
+    parser.add_argument('--extractTex', default=True, type=lambda x: x.lower() in ['true', '1'],
+                        help='whether to extract texture from input image as the uv texture map, set false if you want albeo map from FLAME mode' )
     parser.add_argument('--saveVis', default=True, type=lambda x: x.lower() in ['true', '1'],
                         help='whether to save visualization of output')
     parser.add_argument('--saveKpt', default=False, type=lambda x: x.lower() in ['true', '1'],
